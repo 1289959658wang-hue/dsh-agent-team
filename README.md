@@ -1,4 +1,8 @@
+<a id="zh"></a>
+
 # Agent Team 模式（DeepSeek Harness 插件）
+
+> 中文 ｜ [English](#en)
 
 给 DSH 增加两个工作模式：**`Agent Team · Leader`** 与 **`Agent Team · Worker`**。
 只有选了这两个模式的会话才会进入团队流程；标准模式等其它模式**看不到任何团队工具**。
@@ -183,3 +187,231 @@ node scripts/desktop-bundle.mjs install  # 装进本机 desktop profile（会先
 ## 许可证
 
 MIT，见 [LICENSE](./LICENSE)。
+
+---
+
+<a id="en"></a>
+
+# Agent Team mode (DeepSeek Harness plugin)
+
+> [中文](#zh) ｜ English
+
+Adds two working modes to DSH: **`Agent Team · Leader`** and **`Agent Team · Worker`**.
+Only sessions created in those two modes join the team workflow; standard mode and every other
+mode **see no team tools at all**.
+
+> Current version **1.10.0**. Feature boundaries and known limits live in [CHANGELOG.md](./CHANGELOG.md);
+> the full manual is [docs/GUIDE.md](./docs/GUIDE.md) (Chinese).
+> Host: tested against DSH **0.2.2-rc.5** (Electron desktop build).
+
+## Install
+
+Use DSH's official plugin path (`dsh plugin` installs the package and selects the bundle), then
+**restart the desktop app**.
+
+```bash
+# Prerequisite: `dsh plugin` shells out to pnpm
+npm i -g pnpm
+
+# Install from GitHub (works today)
+dsh plugin --profile desktop add "github:1289959658wang-hue/dsh-agent-team#path:/agent-team"
+```
+
+> **Verified** (2026-11-22): the `#path:/agent-team` sub-directory syntax works; after installing,
+> `dsh --dump-config` shows both presets and `/agent-team/state` returns 200 at runtime.
+> Full record (composed config, default-workspace resolution, open items):
+> [docs/verification-install.md](./docs/verification-install.md) (Chinese).
+
+**The npm package is not published yet** (the account setup is still in progress). Once it is,
+there will be a shorter form:
+
+```bash
+# Not available yet — only after publishing
+dsh plugin --profile desktop add dsh-agent-team
+```
+
+After installing, restart the desktop app and pick **Agent Team · Leader** in the mode selector when
+creating a session.
+
+Uninstall (the package is named `dsh-agent-team` whichever source you installed from):
+
+```bash
+dsh plugin --profile desktop remove dsh-agent-team
+```
+
+> The package contains the plugin only (`index.js` / `tools.js` / `client.js` / `cordis.patch.yml` /
+> `locale` / `docs/DETAIL.md` / `icon.svg` / `LICENSE`). It ships **no test cases or acceptance scripts**.
+
+## Read this first: when to use it, when not to
+
+**Built for long-running projects**: work that spans many sessions, where the context window will
+eventually overflow, where several people need to work in parallel, and where "someone else has to
+pick it up" is normal. The plugin earns its keep with two things — **creating sessions automatically**
+(a leader opens a peer worker on demand) and **automatic session inheritance** (as the context
+approaches its limit, the old session writes a handoff document and a new session takes over: same
+role, fresh context).
+
+**Not for small tasks.** If one session can finish the job in one go and context pressure is low,
+this mode buys you **little upside while multiplying token cost** (measured: an AI session is
+expensive on its own, and here every message is a wake-up, while every worker is a separate system
+prompt + tool table + history). A simple rule of thumb:
+
+| Your situation | Should you use it? |
+|---|---|
+| One-off script, single-file change, one question | ❌ No — just do it in one session |
+| A small project you can wrap up within half a day | ❌ Not worth it; coordination costs more than it saves |
+| Runs for days, context will hit the limit, needs parallel work | ✅ Yes |
+| Long haul where "hand it to someone else after this stretch" matters | ✅ Yes — this is the sweet spot |
+
+> In one line: **it buys you "never hit the context ceiling" and "parallelism", and you pay in tokens.
+> Small tasks need neither.**
+
+## What it is
+
+| Role | What it can do |
+|---|---|
+| **Leader** | Read the roster, spawn new workers, multicast messages, approve handoffs. **Exactly one** session in a team can be the leader |
+| **Worker** | Take tasks, report to the leader, cooperate with peers within the leader's rules; cannot spawn or broadcast |
+| **Host side** | The single writer for the roster, the multicast log and dispatch/handoff requests (stored in `<workspace>/.team/`, **one store per workspace**) |
+
+Approval paths are structural, not prompt-driven:
+
+- **Dispatch** (open a new worker): leader asks → **the user approves** (or the user switches to
+  "full authority" and the leader dispatches directly);
+- **Handoff** (replace a role): worker asks → **the leader approves**; only when the leader is
+  unavailable does the user approve instead;
+- **Transfer** (after the leader is archived or dies): pick the successor in the leader card of the
+  drawer — demotion and appointment happen in one write, recorded in `leaderHistory`. The model has
+  no path to this.
+
+> The panel (Pending / Messages tabs, leader card, workspace dropdown) is described in [Panel](#panel) below.
+
+## Getting started
+
+### 1. Create a leader session
+
+New session → pick **`Agent Team · Leader`** in the mode selector. The **first** leader session of a
+team becomes the leader automatically (later leader sessions do not take over; they are simply told
+who the leader is). Each workspace has its own team; they do not interfere.
+
+### 2. Just tell it what you want
+
+No setup needed. A typical first message:
+
+> Take a look at the roster, then spawn a frontend worker to build the login page — make the task
+> brief thorough.
+
+The leader calls `team_roster` / `team_directory` to inspect the team, then `team_spawn_worker` to
+dispatch.
+
+### 3. Approve the dispatch (one click by default)
+
+The default authority is "needs your approval": dispatching **does not create a session directly** —
+it files a pending request. You click **Approve** in the panel, and only then is the worker created
+and the task brief delivered. If that is too much friction, switch to "full authority" in the panel
+(every dispatch is still logged).
+
+### 4. Workers work and report on their own
+
+A worker is a **real peer session** (not a sub-agent): it has its own context and its own tools
+(`team_report` to report, `team_post` to cooperate). When done it sends the result to the leader via
+`team_report`. The leader uses `team_context` to see who is close to the limit and `team_status` to
+see who is busy and how many messages are queued ahead.
+
+### 5. Automatic handoff when context fills up
+
+At **45% the worker is advised to hand off, at 55% it must** (configurable). It calls
+`team_handoff_request` to write a self-contained handoff document (goal, completed work, artifact
+paths, next steps) and then **latches** itself — it cannot start new steps until the request is
+resolved, so it cannot keep editing while handing over. The leader approves → a successor session is
+created in the same role, the handoff is delivered, and the old session is archived. A leader's own
+successor request can only be approved by **you** (a leader cannot approve its own replacement).
+
+### 6. When the leader is gone
+
+After the leader is archived or dies, click **Transfer…** in the leader card of the drawer and pick a
+successor — demotion and appointment happen in one write and are recorded in `leaderHistory`. The
+model has no path to this.
+
+## Panel
+
+The **Agent Team** button sits at the bottom of the sidebar: a **red count badge** while pending items
+exist; when there are none but the leader is gone or deliveries failed, an **amber dot** (visible
+without opening anything). Clicking it opens the drawer on the right with two tabs.
+
+The **top of the drawer** holds the workspace dropdown (one team per workspace): switching only
+changes the view and never disturbs a running session. Teams with pending items show `●N` on their
+option, while the sidebar badge counts **the current workspace only**.
+
+**Pending tab**
+
+| Block | What you can do |
+|---|---|
+| Leader card | See whether the leader is online; **Transfer…** to replace it |
+| Dispatch authority | Switch between "full authority" and "needs your approval" (every switch is logged) |
+| Team | A roster snapshot (session id · role), active sessions only |
+| Pending | **Dispatch requests**: approve / reject (reason optional); **handoff requests**: approve / reject / request more info (reason required). While the leader is online it approves worker handoffs and the panel says "you don't need to act" |
+
+**Messages tab** (read-only audit)
+
+- Four filters — kind / recipient / time / delivery state — combinable;
+- Search by summary, id or sender; click a row for details and **per-recipient delivery state**
+  (`not delivered / delivered / injected / held (latched) / failed`);
+- "Load earlier" at the bottom pages backwards by id cursor;
+- Green "live" dot = SSE connected; amber "polling" dot = fell back to 3-second polling.
+
+The panel is **read-only plus approvals**: no editing, deleting, retracting, sending on behalf of
+others, or exporting. To reset a team use `POST /agent-team/admin/reset` (`confirm: "RESET"`).
+
+## Multiple workspaces
+
+Since 1.9.0 every workspace has **its own team**: tools resolve the caller's session to its
+workspace, the panel passes `?workspace=`, and cross-workspace delivery is rejected outright
+(`recipient is not in this team`). Existing teams migrate with zero effort — the store already lives
+in each workspace's `.team/`.
+
+`workspaceRoot` needs no configuration: leave it empty and the default workspace from the DSH
+registry is used. To pin a specific directory, set an absolute path in
+`agent-team/cordis.patch.yml` under `config.workspaceRoot`.
+
+## Safety notes
+
+1. **`agent/pre-step` is a waterfall**: listeners must declare `next` and always pass through with
+   `return next()`. A bare `return` makes **every session on the host error on every turn** (this
+   really happened; see [docs/pitfall-pre-step-waterfall.md](./docs/pitfall-pre-step-waterfall.md)).
+2. The guard listener is registered only in the **worker preset scope**; standard sessions never
+   reach it.
+3. Nothing runs automatically inside `apply()`: on startup the plugin only reads and writes its own
+   store — it creates no sessions and sends no messages.
+
+## Documentation
+
+The docs are currently written in Chinese.
+
+| To learn | Read |
+|---|---|
+| **Full manual (install / usage / architecture / flows / features / API / troubleshooting)** | [docs/GUIDE.md](./docs/GUIDE.md) |
+| Plugin internals (when you are changing code) | [agent-team/docs/DETAIL.md](./agent-team/docs/DETAIL.md) |
+| Versions and known limits | [CHANGELOG.md](./CHANGELOG.md) |
+| Team charter | [docs/charter-default.md](./docs/charter-default.md) |
+| Panel specification | [docs/panels.md](./docs/panels.md) |
+| Design notes and the multicast protocol | [docs/reusable-solutions.md](./docs/reusable-solutions.md) |
+| Read before writing hooks | [docs/pitfall-pre-step-waterfall.md](./docs/pitfall-pre-step-waterfall.md) |
+| Install verification | [docs/verification-install.md](./docs/verification-install.md) |
+| Index | [docs/README.md](./docs/README.md) |
+
+## Development and contributing
+
+```bash
+git clone <repo> && cd <repo>
+node scripts/guard-daily-profile.mjs       # health check: exit 0
+node scripts/gen-preset-tools.mjs --check  # preset tool list has not drifted from DSH's standard
+node scripts/desktop-bundle.mjs install    # install into the local desktop profile (backs up first)
+```
+
+Acceptance tests and fixtures are **not shipped with the package**; they only run in the maintainer's
+repository (see [CONTRIBUTING.md](./CONTRIBUTING.md), Chinese).
+
+## License
+
+MIT — see [LICENSE](./LICENSE).
