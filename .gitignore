@@ -31,3 +31,17 @@ probe-*.md
 README.outline.md
 *.draft.md
 docs/qa/
+
+# 发布相关：本地 npm 凭据与打包产物，绝不进仓库
+.npmrc
+*.tgz
+.env
+.env.*
+
+# 系统 / 编辑器垃圾
+Thumbs.db
+desktop.ini
+.DS_Store
+*.swp
+.vscode/
+.idea/
