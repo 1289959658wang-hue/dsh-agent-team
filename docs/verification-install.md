@@ -3,6 +3,9 @@
 > 目的：证明"别人拿到这个插件，用官方安装命令装上就能用"，而不是只有本机能跑。
 > 判据是**命令输出 + 组合后的配置 + 运行时路由**，不是"看起来装上了"。
 
+> **当前对外只开放 GitHub 安装。** npm 包尚未发布（账号环节未完成），
+> 所以"从 registry 安装"这一条**不是待验证，而是暂时不存在**；发布后再补测并勾掉。
+
 ## 1. 环境
 
 | 项 | 值 |
@@ -10,7 +13,7 @@
 | DSH | `0.2.2-rc.5`（桌面端 Electron 打包版，`C:/Software/DSH`） |
 | OS | Windows 10.0.26200 |
 | pnpm | `12.21.0`（`npm i -g pnpm` 装；`dsh plugin` 内部会 spawn 它） |
-| 被测产物 | `agent-team/`（源码目录）与 `dist/dsh-agent-team-1.10.0.tgz`（npm 包，10 个文件） |
+| 被测产物 | `agent-team/`（源码目录）与 `dist/dsh-agent-team-1.10.0.tgz`（npm pack 产物，10 个文件；**尚未发布到 registry**） |
 
 ## 2. 实测一：从 **GitHub 直接安装**（2026-11-22，发布后复测）
 
@@ -118,7 +121,7 @@ package/locale/en.json   package/locale/zh.json
 
 ## 7. 未验证项（不要在文档里写成"支持"）
 
-- **真实 npm registry 安装**：只验证了 GitHub、本地目录与 `npm pack` 产物，**还没从 registry 拉过**（等 `npm publish` 之后补）。
+- **真实 npm registry 安装**：npm 包**尚未发布**（账号环节未完成），这条现在不成立；发布后需要补测 `dsh plugin ... add dsh-agent-team`。
 - **macOS / Linux**：只在 Windows 上跑过；`scripts/desktop-bundle.mjs` 假设 `%USERPROFILE%`。
 - **全新机器**：本次是本机 + 全新 profile，不是全新系统。
 

@@ -8,25 +8,30 @@
 
 ## 安装
 
-两种方式都是 DSH 官方支持的插件安装路径（`dsh plugin` 装包 + bundle 选择），装完**重启桌面端**。
+走 DSH 官方的插件安装路径（`dsh plugin` 装包 + bundle 选择），装完**重启桌面端**。
 
 ```bash
 # 前置：dsh plugin 会调用 pnpm（没装先装一个）
 npm i -g pnpm
 
-# 方式一：npm
-dsh plugin --profile desktop add dsh-agent-team
-
-# 方式二：GitHub（直接从仓库的 agent-team/ 子目录安装）
+# 从 GitHub 安装（当前可用）
 dsh plugin --profile desktop add "github:1289959658wang-hue/dsh-agent-team#path:/agent-team"
 ```
 
-> **GitHub 方式已实测通过**（2026-11-22）：`#path:/agent-team` 语法可用，装完 `dsh --dump-config` 能看到两个 preset，运行时 `/agent-team/state` 返回 200。
+> **已实测通过**（2026-11-22）：`#path:/agent-team` 子目录语法可用，装完 `dsh --dump-config`
+> 能看到两个 preset，运行时 `/agent-team/state` 返回 200。
 > 完整记录（含组合配置、默认工作区推导、未验证项）：[docs/verification-install.md](./docs/verification-install.md)
+
+**npm 包暂未发布**（账号环节还在准备中）。发布之后会多一种更短的写法：
+
+```bash
+# 尚未可用，发布后才有
+dsh plugin --profile desktop add dsh-agent-team
+```
 
 装完重启桌面端，新建会话时在模式选择器里选 **Agent Team · Leader** 即可。
 
-卸载：
+卸载（不论从 GitHub 还是将来从 npm 装，包名都是 `dsh-agent-team`）：
 
 ```bash
 dsh plugin --profile desktop remove dsh-agent-team
