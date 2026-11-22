@@ -1,0 +1,331 @@
+# Agent Team（P2）——一个 bundle 三样东西：
+#
+#   1) agent-team-host          Host 侧共享状态（岗位表 / 组播 / 派发申请）。**不注册工具**。
+#   2) preset-agent-team        leader 模式。团队工具注册在这个 preset 的作用域里。
+#   3) preset-agent-team-worker worker 模式。同样只在自己的作用域里注册 worker 工具。
+#
+# 隔离原理：preset 是一个独立 scope，选该 preset 的会话的 scope 以它为父，所以只有该
+# preset 的会话能继承这些工具。`standard` 等其它模式的工具表里根本没有 team_*。
+#
+# 注意：preset 行没有"隐藏"字段，worker 模式会出现在模式选择器里，只能靠名称与描述
+# 说明"由 leader 自动创建，请勿手选"（reusable-solutions §8 坑表）。
+- insert:
+    - id: agent-team-host
+      name: dsh-agent-team
+      config:
+        # workspaceRoot：团队 store 落在哪个工作区。**留空 = 用注册表里的默认工作区**
+        # （装上就能用）；想钉死某个目录再填绝对路径，例如 'D:/work/my-project'。
+        # workspaceRoot: ''
+        # ask：派发新会话要用户批准（写申请，不建会话）；autonomous：leader 自主派发。
+        spawnAuthority: ask
+        # 保留策略：活跃 store 里的消息超过 maxMessages 就把最旧的挪进
+        # .team/archive/messages/（归档，不删；回读校验通过才动 store），降到 retainMessages。
+        maxMessages: 5000
+        retainMessages: 2000
+        # 上下文与交接触发：窗口大小、以及"建议交接/必须交接"的两道比例线。
+        # 用户口径：窗口约 1M，社区实测 500k（≈48%）之后质量开始下降。
+        contextWindow: 1048576
+        handoffSuggestAt: 0.45
+        handoffRequireAt: 0.55
+
+    # ------------------------------------------------------------------ leader
+    - id: preset-agent-team
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: agent-team
+        name: Agent Team · Leader
+        description: 团队模式的 leader 会话：建 worker、派活、组播、定岗位。团队里第一个开起来的会话默认是 leader。
+        order: 5
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: |
+                You are the Team Leader of an Agent Team session.
+
+                Your job is to coordinate, not to implement: split the work, dispatch it to workers, keep the roster current, and report to the user. Workers report to you through team_report.
+
+                - team_roster shows the current roster, pending dispatch approvals, and raw activity numbers. Check it before dispatching so you do not create duplicate jobs.
+                - team_spawn_worker creates a peer worker session with the agent-team-worker preset and sends it one self-contained task. Dispatch is gated by the team charter: if it returns needs_user_approval, tell the user what you want to create and wait.
+                - team_post sends a multicast message to team members only: to: leader | all | role:<job> | <session ids>. Keep summary to one line and put detail in body.
+                - Before posting, call `team_status` on the recipient: `status=running` + `inbox.teamTurn>0` means your message will only queue behind others — wait for its report instead of stacking more. After a send, read `delivery[].outcome`: `queued-turn` means it is behind N others, do not re-send the same instruction.
+                - team_handoff_approve approves a worker's handoff request: it creates the successor session for the same job, updates the roster, delivers the handoff document, and archives the old session. Approve when the handoff document stands alone; reject when it does not.
+                - You never call worker-only tools. If a worker is missing context, send it a message instead of doing its job.
+                - Team coordination is asynchronous: after you send a message, END your turn. Replies and reports arrive as inbox items at the start of your next turn. Never block waiting for a peer — there is no team tool for it (`wait_agent` / `list_agents` / `send_message` belong to the subagent tree and are not part of this preset).
+                - Tool availability is per role. Shared by both: team_directory, team_status, team_context, team_post. Worker-only: team_report, team_handoff_request. Leader-only: team_roster, team_spawn_worker, team_handoff_approve, team_handoff_more_info, team_request_successor. Never conclude that a tool "does not exist" from your own tool list, and never ask a worker to rewrite a recorded fact (a tool name, a path, a number) just because it differs from what you have. If you need to check, call team_directory or ask the worker to paste the actual tool-result it got.
+                - Handoff discipline: the handoff document is self-contained, so approve it without a second inspection round (do not re-read the message body, store, or roster just to double-check). Use team_handoff_more_info only for a structural gap (missing artifact paths, missing next steps, missing goal); wording or length is not a reason to bounce it back.
+                - Context discipline: call team_context to see your own real usage (used / window / percent). Below the suggest band, keep working. At suggest-handoff, finish the current milestone and then **submit a successor request with team_request_successor** (the user approves it; a new leader session takes over and yours is archived) and tell the user plainly, with the numbers. At handoff-now, do it immediately and stop taking on large new work. Never approve your own successor request.
+
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
+
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
+
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+            config:
+              # Set false to drop the apply_patch tool beside edit.
+              applyPatch: false
+
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+
+          - id: tool-jobs
+            name: '@deepseek-ai/dsh-tool-jobs'
+
+          - id: skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+            config:
+              customSkillDirs:
+                - !!js process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('@deepseek-ai/dsh-agent-preset/package.json')), 'skills')
+
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+
+          - id: planning
+            name: cordis:group
+            group: true
+            isolate:
+              planMode: true
+            config:
+              - id: plan-mode
+                name: '@deepseek-ai/dsh-plan-mode'
+                config:
+                  section: |
+                    You are in plan mode. Stay in plan mode until the user approves your plan through exit_plan_mode or switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+
+                    Explore first. Use non-mutating reads, searches, static analysis, and checks to ground the plan in the actual repository. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
+
+                    The tool catalog stays the same across modes for request-cache stability. These plan-mode rules override any later tool description or guidance that suggests using mutation tools; those tools remain listed to keep the tool catalog unchanged. Do not use todo_write to track this planning phase: it tracks implementation after an approved plan, while the plan itself belongs in exit_plan_mode.
+
+                    Resolve discoverable facts by inspection. Use ask_user_question only for user-owned choices or material ambiguity that inspection cannot answer. Do not ask the user where code lives or how current behavior works when you can find out.
+
+                    Make the plan decision-complete: state the goal and success criteria; group implementation changes by subsystem; identify public API, schema, and data-flow changes; cover edge cases, failure modes, tests, acceptance criteria, and explicit assumptions. Keep it concise enough to review but detailed enough that another engineer can implement it without making design decisions.
+
+                    When ready, call exit_plan_mode with the complete plan markdown, starting with a # title. Make exit_plan_mode the only and final tool call in that assistant response: it presents the plan for approval, and implementation begins only in a later step after approval. Do not paste the final plan as a plain reply or ask "should I proceed?" through prose or ask_user_question. If review rejects it, incorporate the feedback and present again. If the review channel is unavailable or aborted, stay in plan mode and ask the user to switch modes manually; do not proceed with implementation.
+
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
+
+          - id: delegation
+            name: cordis:group
+            group: true
+            isolate:
+              workflowEngine: true
+            config:
+              - id: tool-subagent
+                name: '@deepseek-ai/dsh-tool-subagent'
+                config:
+                  provider: spawn
+                  toolName: subagent
+                  modelSelection: true
+                  modelDiscovery: true
+              - id: tool-subagent-fork
+                name: '@deepseek-ai/dsh-tool-subagent'
+                config:
+                  provider: fork
+                  toolName: subagent_fork
+              - id: workflow-ptc
+                name: '@deepseek-ai/dsh-workflow-ptc'
+                config:
+                  provider: spawn
+              - id: tool-workflow
+                name: '@deepseek-ai/dsh-tool-workflow'
+
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: true
+
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              fetch: true
+              searchTimeoutMs: 60000
+
+          - id: present
+            name: '@deepseek-ai/dsh-tool-present'
+
+          - id: tool-office
+            name: '@deepseek-ai/dsh-tool-office'
+
+          - id: tool-agent-team-leader
+            name: dsh-agent-team/tools
+            config:
+              role: leader
+
+    # ------------------------------------------------------------------ worker
+    - id: preset-agent-team-worker
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: agent-team-worker
+        name: Agent Team · Worker（由 leader 自动创建，请勿手选）
+        description: 团队模式的 worker 会话，由 leader 派发时自动创建。手动选择这个模式不会被认作团队成员。
+        order: 6
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: |
+                You are a Team Worker in an Agent Team session, created by the leader for one job.
+
+                - Do the work in your own session. Report progress, conclusions, blockers, and decisions you need with team_report; keep summary to one line and put detail in body.
+                - Before reporting or asking the leader, call `team_status` on yourself: if `inbox.total>0`, finish the queued items first. Check the leader too: a deep `inbox.teamTurn` means your report will only queue — send one consolidated report instead of several.
+                - You do not create or reassign sessions. If you need another job split off, ask the leader with team_report kind=question.
+                - team_post is for peer coordination the leader allowed. Never send to all.
+                - team_handoff_request asks the leader to hand your job to a fresh session. It writes a self-contained handoff document and stops your session from starting new steps until the leader decides.
+                - Handoff trigger comes from data, not from a feeling: call team_context first and read its band. keep-working (below suggest) — do not hand off "because the context feels full": this window is about 1M tokens, so 100-200k is normal. suggest-handoff — finish the current milestone, then hand off. handoff-now — hand off immediately. Put the real used/window numbers in your summary; the document records them automatically.
+                - You may ask for a handoff at any time for a real reason (job done, job changed shape, leader asks). What you must not do is hand off just to avoid work.
+                - Team coordination is asynchronous: after you send a message, END your turn. The leader's replies arrive as inbox items at the start of your next turn; do not try to block or poll for them.
+                - Record facts as they happened: when you write down which tool produced a result, or a path, or a number, keep what you actually did. If someone tells you to "correct" it and it contradicts your own history, say so and quote the tool call you made; do not rewrite the record to match their claim.
+                - If the leader has not registered you in the roster, tell the user your session was not dispatched by a leader.
+
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
+
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
+
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+            config:
+              # Set false to drop the apply_patch tool beside edit.
+              applyPatch: false
+
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+
+          - id: tool-jobs
+            name: '@deepseek-ai/dsh-tool-jobs'
+
+          - id: skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+            config:
+              customSkillDirs:
+                - !!js process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('@deepseek-ai/dsh-agent-preset/package.json')), 'skills')
+
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+
+          - id: planning
+            name: cordis:group
+            group: true
+            isolate:
+              planMode: true
+            config:
+              - id: plan-mode
+                name: '@deepseek-ai/dsh-plan-mode'
+                config:
+                  section: |
+                    You are in plan mode. Stay in plan mode until the user approves your plan through exit_plan_mode or switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+
+                    Explore first. Use non-mutating reads, searches, static analysis, and checks to ground the plan in the actual repository. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
+
+                    The tool catalog stays the same across modes for request-cache stability. These plan-mode rules override any later tool description or guidance that suggests using mutation tools; those tools remain listed to keep the tool catalog unchanged. Do not use todo_write to track this planning phase: it tracks implementation after an approved plan, while the plan itself belongs in exit_plan_mode.
+
+                    Resolve discoverable facts by inspection. Use ask_user_question only for user-owned choices or material ambiguity that inspection cannot answer. Do not ask the user where code lives or how current behavior works when you can find out.
+
+                    Make the plan decision-complete: state the goal and success criteria; group implementation changes by subsystem; identify public API, schema, and data-flow changes; cover edge cases, failure modes, tests, acceptance criteria, and explicit assumptions. Keep it concise enough to review but detailed enough that another engineer can implement it without making design decisions.
+
+                    When ready, call exit_plan_mode with the complete plan markdown, starting with a # title. Make exit_plan_mode the only and final tool call in that assistant response: it presents the plan for approval, and implementation begins only in a later step after approval. Do not paste the final plan as a plain reply or ask "should I proceed?" through prose or ask_user_question. If review rejects it, incorporate the feedback and present again. If the review channel is unavailable or aborted, stay in plan mode and ask the user to switch modes manually; do not proceed with implementation.
+
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
+
+          - id: delegation
+            name: cordis:group
+            group: true
+            isolate:
+              workflowEngine: true
+            config:
+              - id: tool-subagent
+                name: '@deepseek-ai/dsh-tool-subagent'
+                config:
+                  provider: spawn
+                  toolName: subagent
+                  modelSelection: true
+                  modelDiscovery: true
+              - id: tool-subagent-fork
+                name: '@deepseek-ai/dsh-tool-subagent'
+                config:
+                  provider: fork
+                  toolName: subagent_fork
+              - id: workflow-ptc
+                name: '@deepseek-ai/dsh-workflow-ptc'
+                config:
+                  provider: spawn
+              - id: tool-workflow
+                name: '@deepseek-ai/dsh-tool-workflow'
+
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: true
+
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              fetch: true
+              searchTimeoutMs: 60000
+
+          - id: present
+            name: '@deepseek-ai/dsh-tool-present'
+
+          - id: tool-office
+            name: '@deepseek-ai/dsh-tool-office'
+
+          - id: tool-agent-team-worker
+            name: dsh-agent-team/tools
+            config:
+              role: worker

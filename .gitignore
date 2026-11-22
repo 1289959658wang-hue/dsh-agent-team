@@ -1,0 +1,33 @@
+# 依赖与包管理
+node_modules/
+.pnpm-store/
+pnpm-debug.log*
+
+# 运行日志
+*.log
+
+# 运行期数据与临时产物（都不入库）
+.team/
+*.tmp
+.p*/run.lock
+
+# 打包产物
+dist/
+
+# 本地开发/验收残留（公开仓库不含测试用例；这些是本地现场）
+.diag/
+.p1a/
+.p1b/
+.p1c/
+.p1c2/
+.p2/
+.edge2/
+.scratch-*/
+research/
+grading/
+spike-*/
+plugin/
+probe-*.md
+README.outline.md
+*.draft.md
+docs/qa/

@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Agent team",
+    "description": "Leader and worker modes for a peer-session team: the team tools exist only inside those two presets, and the host shares the roster, multicast log and dispatch requests.",
+    "detail": "docs/DETAIL.md"
+  }
+}

@@ -1,0 +1,41 @@
+#!/bin/sh
+# pre-commit 守卫 —— 2026-11-21 建立
+#
+# 目的：不让「会击穿所有会话」的那类错误进仓库（事故 INC-2026-11-20-PRESTEP）。
+# 三道检查，任一不过就拒绝提交：
+#   1) 日常 profile 体检：测试插件有没有被写进 bundles、waterfall 监听器有没有裸 return
+#   2) 本仓库所有插件目录的静态 scan
+#   3) 两个团队 preset 的工具清单有没有跟 shipped 的 standard 漂移
+#
+# 绕过：git commit --no-verify —— 只在确知原因时用，并在 commit message 里写明为什么。
+#
+# 新克隆启用：git config core.hooksPath .githooks
+
+set -u
+
+fail() {
+	printf '%s\n' "pre-commit: $1" >&2
+	exit 1
+}
+
+command -v node >/dev/null 2>&1 || fail "找不到 node，无法执行检查"
+
+out=$(node scripts/guard-daily-profile.mjs 2>&1) || {
+	printf '%s\n' "$out" >&2
+	fail "guard-daily-profile.mjs 未通过（见上），提交被拒"
+}
+
+for dir in plugin agent-team spike-p1a spike-effort spike-p1c spike-p1c2; do
+	[ -d "$dir" ] || continue
+	scan_out=$(node scripts/guard-daily-profile.mjs --scan "$dir" 2>&1) || {
+		printf '%s\n' "$scan_out" >&2
+		fail "静态 scan 未通过：$dir（见上）"
+	}
+done
+
+gen_out=$(node scripts/gen-preset-tools.mjs --check 2>&1) || {
+	printf '%s\n' "$gen_out" >&2
+	fail "两个团队 preset 的工具清单与 standard 漂移了：跑 node scripts/gen-preset-tools.mjs --write 同步，再重新安装 bundle"
+}
+
+printf '%s\n' "pre-commit: ok"

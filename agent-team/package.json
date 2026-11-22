@@ -1,0 +1,63 @@
+{
+  "name": "dsh-agent-team",
+  "version": "1.10.0",
+  "description": "Agent Team mode for DeepSeek Harness: Leader/Worker presets whose team tools live only inside those two scopes, with a per-workspace host-side roster, multicast store and dispatch requests.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./tools": "./tools.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "tools.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "docs",
+    "icon.svg",
+    "LICENSE"
+  ],
+  "icon": "./icon.svg",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "dsh-bundle",
+    "agent-team",
+    "multi-agent",
+    "leader",
+    "worker"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OWNER/REPO.git",
+    "directory": "agent-team"
+  },
+  "homepage": "https://github.com/OWNER/REPO#readme",
+  "bugs": {
+    "url": "https://github.com/OWNER/REPO/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "author": "Agent Team Authors",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-layout"
+      ]
+    }
+  },
+  "license": "MIT"
+}

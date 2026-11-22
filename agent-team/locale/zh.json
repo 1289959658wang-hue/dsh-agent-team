@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Agent Team 模式",
+    "description": "团队的 leader 与 worker 两个模式：团队工具只存在于这两个 preset 里，Host 侧共享岗位表、组播消息与派发申请。",
+    "detail": "docs/DETAIL.md"
+  }
+}
