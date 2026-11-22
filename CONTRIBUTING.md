@@ -66,6 +66,17 @@ node scripts/desktop-bundle.mjs status
 | `spike-*/`、`.p1a/`…`.p2/`、`.diag/` | **维护者本地的验收现场**，已在 `.gitignore` 里，不进公开仓库 |
 | `.team/` `dist/` | 运行期数据与产物，**不入库** |
 
+## 文档双语规则（2026-11-22 起）
+
+**面向用户与贡献者的文档一律中英双语，放在同一个文件里**：中文在上、`---` 分隔、英文在下，
+顶部用 `<a id="zh">` / `<a id="en">` 锚点互相跳转（见 `README.md` 的写法）。
+
+- 适用：`README.md`、`CONTRIBUTING.md`、`docs/README.md`、`docs/panels.md`、
+  `docs/verification-install.md`、`docs/GUIDE.md`（英文导读版）、以及**以后新增的同类文档**；
+- 不适用：`docs/verification-*.md` 这类实测记录与 `CHANGELOG.md` —— 它们是过程证据，保持单语，
+  只在顶部写一句英文摘要；
+- **改了中文就必须同步改英文**，否则 PR 不合并。评审时把"英文段是否与中文段同义"当成一条判据。
+
 ## 许可
 
 本仓库以 **MIT** 发布（见 [`LICENSE`](LICENSE)）。**提交 PR 即视为同意以 MIT 授权你的贡献**（inbound = outbound），不需要额外签 CLA。
@@ -80,6 +91,7 @@ node scripts/desktop-bundle.mjs status
 - [ ] 改动涉及的判据跑过，并在 commit message 里引用了报告字段
 - [ ] 没有把测试会话/测试团队写进用户真实工作区
 - [ ] 文档同步（改了行为就改 `docs/` 对应章节 + 变更记录）
+- [ ] **双语同步**：面向用户/贡献者的文档必须中英同改（用户 2026-11-22 定的规则，见下）
 - [ ] 没有提交密钥、绝对路径等个人信息
 
 ---
@@ -163,6 +175,20 @@ repository**, so the repository's own workspace stays clean; override it with `D
 | `spike-*/`, `.p1a/`…`.p2/`, `.diag/` | **Maintainer-local acceptance fixtures**, already in `.gitignore`; not part of the public repo |
 | `.team/` `dist/` | Runtime data and build output, **never committed** |
 
+## Documentation language rule (since 2026-11-22)
+
+**User-facing and contributor-facing documents are bilingual in a single file**: Chinese first, then a
+`---` separator, then English, with `<a id="zh">` / `<a id="en">` anchors at the top so the two versions
+can jump to each other (see `README.md`).
+
+- Applies to: `README.md`, `CONTRIBUTING.md`, `docs/README.md`, `docs/panels.md`,
+  `docs/verification-install.md`, `docs/GUIDE.md` (English guide), and any **new document of the same
+  kind**;
+- Does not apply to: verification records such as `docs/verification-*.md` and `CHANGELOG.md` — they are
+  process evidence, stay monolingual, with a one-line English summary at the top;
+- **Changing the Chinese text means changing the English text in the same commit**, otherwise the PR is
+  not merged. Treat "the English section says the same thing as the Chinese one" as a review criterion.
+
 ## License
 
 This repository is released under **MIT** (see [`LICENSE`](LICENSE)). **Opening a PR means you agree to
@@ -179,4 +205,5 @@ license your contribution under MIT** (inbound = outbound); no CLA to sign.
 - [ ] The criteria affected by your change were run, and the commit message cites the report fields
 - [ ] No test session or test team was written into a user's real workspace
 - [ ] Docs updated (behaviour change ⇒ the matching `docs/` section + changelog entry)
+- [ ] **Both languages updated**: user-facing and contributor-facing docs must change in Chinese *and* English (rule set 2026-11-22, see below)
 - [ ] No secrets, absolute paths or other personal information in the diff
