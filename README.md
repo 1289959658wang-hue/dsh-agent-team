@@ -21,7 +21,8 @@ dsh plugin --profile desktop add dsh-agent-team
 dsh plugin --profile desktop add "github:1289959658wang-hue/dsh-agent-team#path:/agent-team"
 ```
 
-> 实测记录（含组合后的配置、运行时路由 200、默认工作区推导）：[docs/verification-install.md](./docs/verification-install.md)
+> **GitHub 方式已实测通过**（2026-11-22）：`#path:/agent-team` 语法可用，装完 `dsh --dump-config` 能看到两个 preset，运行时 `/agent-team/state` 返回 200。
+> 完整记录（含组合配置、默认工作区推导、未验证项）：[docs/verification-install.md](./docs/verification-install.md)
 
 装完重启桌面端，新建会话时在模式选择器里选 **Agent Team · Leader** 即可。
 

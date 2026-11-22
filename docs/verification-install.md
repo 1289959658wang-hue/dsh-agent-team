@@ -12,7 +12,37 @@
 | pnpm | `12.21.0`（`npm i -g pnpm` 装；`dsh plugin` 内部会 spawn 它） |
 | 被测产物 | `agent-team/`（源码目录）与 `dist/dsh-agent-team-1.10.0.tgz`（npm 包，10 个文件） |
 
-## 2. 实测一：从**源码目录**安装（等价于 GitHub 子目录安装）
+## 2. 实测一：从 **GitHub 直接安装**（2026-11-22，发布后复测）
+
+仓库：`github.com/1289959658wang-hue/dsh-agent-team`（公开，`main` 分支，tag `v1.10.0`）
+
+```bash
+dsh --profile ghcheck --from-default-profile web --dump-config
+dsh plugin --profile ghcheck add "github:1289959658wang-hue/dsh-agent-team#path:/agent-team"
+```
+
+输出（7.9 秒）：
+
+```
+Packages: +1
+dependencies:
++ dsh-agent-team 1.10.0
+Done in 7.9s using pnpm v12.21.0
+```
+
+核对：
+
+| 检查 | 结果 |
+|---|---|
+| profile `dependencies` | `github:1289959658wang-hue/dsh-agent-team#path:/agent-team` |
+| profile `dsh.profile.bundles` | 自动追加 `dsh-agent-team` |
+| `--dump-config` | `agent-team-host` / `preset-agent-team` / `preset-agent-team-worker` 都在 |
+| 起服务后 `GET /agent-team/state` | **200** |
+| `GET /agent-team/workspaces` | **200**，`default` = 主工作区 |
+
+**结论：`#path:/<子目录>` 语法可用**，不需要把插件提到仓库根。
+
+## 3. 实测二：从**本地目录**安装（等价路径，离线可复现）
 
 ```bash
 # 全新 profile
@@ -48,7 +78,7 @@ after : ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'dsh-agent-team']
 
 > 这一条纠正了之前的悬念：`dsh plugin add` 只做包安装、bundle 要另选——**实测不成立**，它一步到位。
 
-## 3. 实测二：运行时真的挂上了
+## 4. 实测三：运行时真的挂上了
 
 用该 profile 起 web（`--port 0 --no-open`）后：
 
@@ -60,7 +90,7 @@ after : ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'dsh-agent-team']
 
 `/agent-team/*` 是本插件注册的同源路由：能返回 200，说明 Host 侧插件**真的激活了**，不是只写进了配置。
 
-## 4. 实测三：没配 `workspaceRoot` 时的默认工作区
+## 5. 实测四：没配 `workspaceRoot` 时的默认工作区
 
 第一次实现取的是"注册表第一个工作区"，实测发现它被解析成最近新建的临时工作区
 （`…\AT-Sandbox\ws-e`）——因为 DSH 把新工作区排在注册表最前。
@@ -68,7 +98,7 @@ after : ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'dsh-agent-team']
 改成**会话最多的工作区**后再测：`default = C:\Work Place\AgentWorkTeam`（11 个会话，最多），符合预期。
 一个会话都没有时才退回第一个，最后才退回进程 cwd。
 
-## 5. npm 包内容（发布包不含测试）
+## 6. npm 包内容（发布包不含测试）
 
 ```bash
 cd agent-team && npm pack --pack-destination ../dist
@@ -86,14 +116,13 @@ package/locale/en.json   package/locale/zh.json
 
 包内没有 `spike-*` / `test` / `spec`（`tar -tzf | grep -E "test|spike|spec"` 为空）。
 
-## 6. 未验证项（不要在文档里写成"支持"）
+## 7. 未验证项（不要在文档里写成"支持"）
 
-- **真实 GitHub 远端安装**：`github:<owner>/<repo>#path:/agent-team` 的 pnpm 语法**没有实测**（本地用的是等价目录）。
-- **真实 npm registry 安装**：只验证了本地目录与 `npm pack` 产物，没有从 registry 拉过。
+- **真实 npm registry 安装**：只验证了 GitHub、本地目录与 `npm pack` 产物，**还没从 registry 拉过**（等 `npm publish` 之后补）。
 - **macOS / Linux**：只在 Windows 上跑过；`scripts/desktop-bundle.mjs` 假设 `%USERPROFILE%`。
 - **全新机器**：本次是本机 + 全新 profile，不是全新系统。
 
-## 7. 复现
+## 8. 复现
 
 ```bash
 # 1) 需要 pnpm 在 PATH（dsh plugin 会 spawn 它）
