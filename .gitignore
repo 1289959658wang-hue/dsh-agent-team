@@ -45,3 +45,6 @@ desktop.ini
 *.swp
 .vscode/
 .idea/
+
+# Windows 保留设备名：某些命令误重定向会留下一个 git 无法 lstat 的条目
+CON
