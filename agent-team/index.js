@@ -2148,9 +2148,24 @@ export function apply(ctx, config = {}) {
    * （DSH 的默认工作区通常排在最前），再没有才退回进程 cwd。
    * 这样"装上就能用"，而不会把某个人的绝对路径带进别人的机器。
    */
-  const defaultRoot = resolveDefaultRoot(config)
-    ?? ctx.workspaceRegistry.list()[0]?.path
-    ?? process.cwd()
+  const defaultRoot = resolveDefaultRoot(config) ?? pickDefaultWorkspace()?.path ?? process.cwd()
+
+  /**
+   * 没配 `workspaceRoot` 时的默认工作区。
+   *
+   * 不能简单取 `list()[0]` —— DSH 把**新建**的工作区排在注册表最前，那样"默认"会变成
+   * 最近建的那个（可能是个临时目录）。这里挑**会话最多**的工作区当默认（注册表顺序做并列时的次序），
+   * 对刚装上的用户来说通常就是主工作区；一个会话都没有时再退回第一个。
+   */
+  function pickDefaultWorkspace() {
+    const workspaces = ctx.workspaceRegistry.list()
+    if (workspaces.length === 0) return undefined
+    let best = workspaces[0]
+    for (const candidate of workspaces) {
+      if (candidate.sessionIds.length > best.sessionIds.length) best = candidate
+    }
+    return best
+  }
 
   /**
    * store 缓存：一个工作区一份（第 2 步起会有第二个 key）。

@@ -11,12 +11,17 @@
 两种方式都是 DSH 官方支持的插件安装路径（`dsh plugin` 装包 + bundle 选择），装完**重启桌面端**。
 
 ```bash
+# 前置：dsh plugin 会调用 pnpm（没装先装一个）
+npm i -g pnpm
+
 # 方式一：npm
 dsh plugin --profile desktop add dsh-agent-team
 
 # 方式二：GitHub（直接从仓库的 agent-team/ 子目录安装）
 dsh plugin --profile desktop add "github:OWNER/REPO#path:/agent-team"
 ```
+
+> 实测记录（含组合后的配置、运行时路由 200、默认工作区推导）：[docs/verification-install.md](./docs/verification-install.md)
 
 装完重启桌面端，新建会话时在模式选择器里选 **Agent Team · Leader** 即可。
 
@@ -73,6 +78,7 @@ dsh plugin --profile desktop remove dsh-agent-team
 | 面板规格 | [docs/panels.md](./docs/panels.md) |
 | 设计调研与组播协议 | [docs/reusable-solutions.md](./docs/reusable-solutions.md) |
 | 写钩子前必读 | [docs/pitfall-pre-step-waterfall.md](./docs/pitfall-pre-step-waterfall.md) |
+| 安装实测 | [docs/verification-install.md](./docs/verification-install.md) |
 | 索引 | [docs/README.md](./docs/README.md) |
 
 ## 开发与贡献
