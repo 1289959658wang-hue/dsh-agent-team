@@ -1,12 +1,16 @@
+<a id="zh"></a>
+
 # 参与开发
 
+> 中文 ｜ [English](#en)
+>
 > 先读 [`README.md`](README.md) 了解这是什么，再读 [`docs/handover.md`](docs/handover.md) 了解当前进度。
 
 ## 环境
 
 - DSH **0.2.2-rc.5**（桌面端）。源码在 `C:\Software\DSH\resources\app.asar` 里，普通 Node 读不进去——
   用 `python scripts/asar-extract.py` 抽取（用法见脚本头部注释）。
-- 本机没有 pnpm；打包用 `npm pack ./agent-team --pack-destination dist`。
+- **需要 pnpm**：`dsh plugin` 内部会 spawn 它，打包也走它。`npm i -g pnpm` 装一个。
 - **没有自动化测试框架**：所有验收都是"脚本 + 退出码 / 报告 JSON"，见各 `docs/verification-*.md`。
 
 ## 提交前必须做的三件事
@@ -37,17 +41,17 @@ git config core.hooksPath .githooks
 # 1) 静态体检
 node scripts/guard-daily-profile.mjs
 
-# 2) 全量验收（独立 profile + 沙箱工作区；不碰真实团队）
+# 2) 全量验收（独立 profile + 仓库外的沙箱工作区；不碰真实团队）
 #    完整命令见 docs/verification-p2.md §7
 node scripts/desktop-bundle.mjs status
 ```
 
-验收 harness 的会话与团队 store 都在仓库外的独立工作区（不污染本仓库工作区），
+验收 harness 的会话与团队 store 都在**仓库外**的独立工作区（不污染本仓库工作区），
 `DSH_P2_WORKSPACE` 可覆盖。**绝不要把 harness 指向真实工作区**——两边会互相覆盖团队数据。
 
 ## 提交与回退
 
-- 一次可验收的改动 = 一个 commit；阶段打 tag（`p0`…`p3`、`abc-fix`、`p4-start`……）。
+- 一次可验收的改动 = 一个 commit；阶段打 tag。
 - commit message 首行写**做了什么**，正文写**判据**（哪条命令、退出码、报告里的哪个字段）。
 - 需要回退：`git reset --hard <tag>`；profile 改动回退用 `node scripts/desktop-bundle.mjs uninstall`。
 - 改动 `~/.dsh/profiles/*` 之前，先备份并记录 SHA256（`desktop-bundle.mjs` 会自动做）。
@@ -57,9 +61,9 @@ node scripts/desktop-bundle.mjs status
 | 目录 | 放什么 |
 |---|---|
 | `agent-team/` | 插件本体：Host 状态机、preset 声明、作用域工具、抽屉前端 |
-| `spike-*/` | 各阶段验收 harness（不参与运行） |
-| `scripts/` | 体检、复现、装卸、asar 抽取 |
-| `.p1a/`…`.p2/` | 运行证据（report.json 等），入库 |
+| `scripts/` | 体检、复现、装卸、asar 抽取、里程碑快照 |
+| `docs/` | 设计、实测、防坑文档 |
+| `spike-*/`、`.p1a/`…`.p2/`、`.diag/` | **维护者本地的验收现场**，已在 `.gitignore` 里，不进公开仓库 |
 | `.team/` `dist/` | 运行期数据与产物，**不入库** |
 
 ## 许可
@@ -68,7 +72,7 @@ node scripts/desktop-bundle.mjs status
 
 > `agent-team/LICENSE` 是根 `LICENSE` 的副本：npm 打包只认包内的 `LICENSE`（`files` 是白名单，
 > 根目录那份不会被自动带进 tarball）。改许可证时**两份必须同时改**；`diff LICENSE agent-team/LICENSE` 应无输出。
-如果你不接受这一点，请不要提交 PR，改为开 issue 描述问题。
+> 如果你不接受这一点，请不要提交 PR，改为开 issue 描述问题。
 
 ## 提交前自检清单
 
@@ -76,4 +80,103 @@ node scripts/desktop-bundle.mjs status
 - [ ] 改动涉及的判据跑过，并在 commit message 里引用了报告字段
 - [ ] 没有把测试会话/测试团队写进用户真实工作区
 - [ ] 文档同步（改了行为就改 `docs/` 对应章节 + 变更记录）
-- [ ] 没有提交密钥、绝对路径泄漏之外的个人信息（开源前还要过一遍 `docs/git-workflow.md` §5）
+- [ ] 没有提交密钥、绝对路径等个人信息
+
+---
+
+<a id="en"></a>
+
+# Contributing
+
+> [中文](#zh) ｜ English
+>
+> Read [`README.md`](README.md) first to learn what this is, then [`docs/handover.md`](docs/handover.md)
+> for the current state of the project.
+
+## Environment
+
+- DSH **0.2.2-rc.5** (desktop). The sources live inside `C:\Software\DSH\resources\app.asar`, which
+  plain Node cannot read — extract them with `python scripts/asar-extract.py` (usage in the script header).
+- **pnpm is required**: `dsh plugin` spawns it internally, and packaging uses it. Install it with
+  `npm i -g pnpm`.
+- **There is no test framework**: every acceptance criterion is "a script plus an exit code / report
+  JSON", documented in the `docs/verification-*.md` files.
+
+## Three things to run before committing
+
+```bash
+node scripts/guard-daily-profile.mjs        # exit 0 (no test plugin polluted the daily profile, no bare return)
+node scripts/repro-pre-step-waterfall.mjs   # output matches the documentation
+node scripts/desktop-bundle.mjs status      # if you changed profile install/uninstall
+```
+
+`.githooks/pre-commit` runs the first two automatically and **rejects the commit on ERROR**. Enable it
+in a fresh clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+## Three hard rules (all learned the hard way)
+
+1. **Waterfall events must `return next()`**: `agent/pre-step`, `agent/request`,
+   `agent/request-error`, `system-prompt/assemble`. A bare `return` is not "allow" — it hands
+   `undefined` back as the decision and makes every session on the host crash on every turn. See
+   [`docs/pitfall-pre-step-waterfall.md`](docs/pitfall-pre-step-waterfall.md).
+2. **`*-spike` / `*-test` never go into a daily profile's `bundles`.** Run them in a dedicated profile
+   or via `--patch`.
+3. **No "work at startup" inside `apply()`**: any `setTimeout`-driven action must sit behind an
+   explicit env switch, off by default.
+
+## Verifying a change
+
+```bash
+# 1) Static health check
+node scripts/guard-daily-profile.mjs
+
+# 2) Full acceptance (dedicated profile + a sandbox workspace outside this repo; never touches a real team)
+#    Full command in docs/verification-p2.md §7
+node scripts/desktop-bundle.mjs status
+```
+
+The acceptance harness keeps its sessions and team store in a **separate workspace outside this
+repository**, so the repository's own workspace stays clean; override it with `DSH_P2_WORKSPACE`.
+**Never point the harness at a real workspace** — the two would overwrite each other's team data.
+
+## Commits and rollbacks
+
+- One verifiable change = one commit; tag milestones.
+- The first line of a commit message says **what changed**; the body states the **criterion** (which
+  command, which exit code, which report field).
+- To roll back: `git reset --hard <tag>`. To roll back profile changes:
+  `node scripts/desktop-bundle.mjs uninstall`.
+- Before touching `~/.dsh/profiles/*`, back up and record SHA256 (`desktop-bundle.mjs` does this
+  automatically).
+
+## Directory layout
+
+| Directory | Contents |
+|---|---|
+| `agent-team/` | The plugin itself: host state machine, preset declarations, scoped tools, drawer UI |
+| `scripts/` | Health checks, reproductions, install/uninstall, asar extraction, milestone snapshots |
+| `docs/` | Design, verification and pitfall documents |
+| `spike-*/`, `.p1a/`…`.p2/`, `.diag/` | **Maintainer-local acceptance fixtures**, already in `.gitignore`; not part of the public repo |
+| `.team/` `dist/` | Runtime data and build output, **never committed** |
+
+## License
+
+This repository is released under **MIT** (see [`LICENSE`](LICENSE)). **Opening a PR means you agree to
+license your contribution under MIT** (inbound = outbound); no CLA to sign.
+
+> `agent-team/LICENSE` is a copy of the root `LICENSE`: npm packaging only honours the `LICENSE`
+> inside the package (`files` is a whitelist, so the root copy is not included in the tarball).
+> When changing the license, **both files must change together**; `diff LICENSE agent-team/LICENSE`
+> should print nothing. If you are not comfortable with that, please open an issue instead of a PR.
+
+## Pre-commit checklist
+
+- [ ] `guard` exits 0
+- [ ] The criteria affected by your change were run, and the commit message cites the report fields
+- [ ] No test session or test team was written into a user's real workspace
+- [ ] Docs updated (behaviour change ⇒ the matching `docs/` section + changelog entry)
+- [ ] No secrets, absolute paths or other personal information in the diff

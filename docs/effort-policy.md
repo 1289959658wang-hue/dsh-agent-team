@@ -1,5 +1,9 @@
+<a id="zh"></a>
+
 # 推理强度调度（effort policy）
 
+> 中文 ｜ [English](#en)
+>
 > 状态：设计 + 已实测（2026-11-20）
 > 结论：派发任务时可以按任务复杂度动态设定推理强度，`off / low / high / max` 四档均有效。
 
@@ -32,7 +36,8 @@ await ctx.sessionController.selectModel({
 
 然后 `prompt({ mode: 'queue', ... })`。
 
-实测（`spike-effort`，已卸载）：三个会话分别设 `off` / `high` / `max`，各自会话日志里的 `request/header.config.reasoningEffort` 与请求值一致，全部 PASS。
+实测（独立 profile 的临时 bundle，已卸载）：三个会话分别设 `off` / `high` / `max`，各自会话日志里的
+`request/header.config.reasoningEffort` 与请求值一致，全部 PASS。
 
 ---
 
@@ -70,3 +75,88 @@ await ctx.sessionController.selectModel({
 - 未做自动分级（由 leader 判断，符合"可配置优先"）。
 - 未验证子智能体的强度继承规则。
 - 未做按会话的强度切换历史展示（面板只显示每条消息的 `complexity → effort`）。
+
+---
+
+<a id="en"></a>
+
+# Reasoning-effort policy
+
+> [中文](#zh) ｜ English
+>
+> Status: designed and measured (2026-11-20).
+> Conclusion: effort can be set per task at dispatch time; all four levels `off / low / high / max` work.
+
+---
+
+## 1. Why this exists
+
+In the first multicast experiment (P1b), the request header of every new session was:
+
+```json
+"config": { "provider": "deepseek-account", "model": "deepseek-flash", "reasoningEffort": "max" }
+```
+
+The plugin never selected a model or effort when creating sessions, so they inherited the model
+catalogue default. Running `max` on trivial tasks is both slow and expensive.
+
+---
+
+## 2. Mechanism (measured)
+
+After a session is created and active, and before delivering the task, call:
+
+```js
+await ctx.sessionController.selectModel({
+  sessionId,
+  provider: base.provider,   // e.g. deepseek-account
+  model: base.model,         // e.g. deepseek-flash
+  reasoningEffort: 'off',    // off | low | high | max
+})
+```
+
+then `prompt({ mode: 'queue', ... })`.
+
+Measured with a throwaway bundle in a dedicated profile (since uninstalled): three sessions set to
+`off` / `high` / `max` each logged a `request/header.config.reasoningEffort` matching the requested
+value. All PASS.
+
+---
+
+## 3. Default tier mapping
+
+| Tier | Rough criterion | Effort |
+|---|---|---|
+| `simple` | One file, mechanical change, Q&A, notice, report | `off` |
+| `moderate` | Several files, needs research but the path is clear, routine implementation | `high` |
+| `complex` | Architecture or cross-module work, high risk, long running, real trade-offs | `max` |
+
+Rules:
+
+- **`max` is only for `complex`**, and the leader must state the reason in the dispatch message.
+- If `high` suffices, do not escalate to `max`; `max` is the exception, not the default.
+- Effort can **change per task** within one session: set it before each dispatch instead of freezing it
+  at session creation.
+- The handoff document records a "suggested effort"; the new session sets effort again for its next task.
+- Reports and the panel count `max` usage, **display only, never block** (consistent with "no quotas").
+
+The mapping is configurable in the team charter / plugin config; it is not hard-coded.
+
+---
+
+## 4. Where it sits in the team protocol
+
+- **Leader dispatch**: tag each task with `complexity` and call `selectModel` before delivery.
+- **Worker handoff**: the handoff carries a suggested effort; after the leader approves, the successor's
+  first task is set by the same rule.
+- **Leader handoff**: does not affect members; the new leader sets its own efforts.
+- **Sub-agents**: decided by the parent when creating the sub-task (the sub-agent tool has its own effort
+  parameter; still to be wired and verified).
+
+---
+
+## 5. Not done / open
+
+- No automatic tiering (the leader decides — consistent with "configuration first").
+- Sub-agent effort inheritance is unverified.
+- No per-session effort-change history in the panel (it only shows `complexity → effort` per message).
