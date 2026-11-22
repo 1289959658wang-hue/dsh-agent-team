@@ -1,5 +1,9 @@
+<a id="zh"></a>
+
 # 团队章程 · 默认草案（v0.1）
 
+> 中文 ｜ [English](#en)
+>
 > 这是**安装时随插件提供的默认草案**，不是最终章程。
 > 安装后由 leader 读取本文件，按当前项目补全，写成 `team/charter.md`，交用户确认；**只有 `status: confirmed` 的章程才能正式启用团队**（建 worker、派活、组播）。
 > 所有标 `[可改]` 的条目都是默认建议，leader 与用户可随时修改；框架不强制、不写死。
@@ -152,8 +156,6 @@ observation:                    # 风控观察，非配额
 - 用组播代替点对点（噪音）。
 - 绕过 leader 直接向用户提需求。
 
----
-
 ### 4.5 任务分级与推理强度
 
 派发任务时，leader 必须给任务分级，并在投递前设定该会话的推理强度。
@@ -174,14 +176,14 @@ observation:                    # 风控观察，非配额
 
 ## 5. 风控口径（默认，leader 可改）
 
-- **框架不给阈值，不定义“异常”。** leader 自主判断。
+- **框架不给阈值，不定义"异常"。** leader 自主判断。
 - 观察频次由 leader 自定，可关闭。
 - **必须汇报给用户**的两种情形：
   1. leader 判定异常并采取处置（哪怕只发了一条提醒）；
   2. leader 不确定是否异常。
 - 汇报内容的最低要求：让用户能**复核并决定下一步**（发生了什么、涉及谁、依据在哪、已做什么、要用户定什么）。**格式不限**，按项目与用户习惯写。
 - leader 可暂停单个会话；暂停整个团队需用户确认。
-- 正常就不干预：不因“消息多”本身动作。
+- 正常就不干预：不因"消息多"本身动作。
 
 ---
 
@@ -240,7 +242,7 @@ leader 交接**由用户负责**：leader 只准备材料与汇报，不自行�
 #### 待批的形式（人工代批）
 
 - **载体**：插件面板里的「团队待办」清单，不是聊天消息。Host 服务持久化，刷新/重启不丢。（面板规格见 [panels.md](./panels.md)）
-- **提示**：面板角标 + 桌面通知；点开看到：申请方会话、岗位、原因、交接单、建议动作。
+- **提示**：面板角标；点开看到：申请方会话、岗位、原因、交接单、建议动作。（桌面通知已放弃）
 - **操作**：批准 / 拒绝 / 要求补充；批准后由系统建会话、更新岗位表；结果写日志与团队记录。
 - **不用 DSH 自带 approval 做代批**，原因是语义与限制不匹配：
   - `approval.request` 必须在**打开的回合内**调用（空闲会话直接拒绝）；
@@ -262,7 +264,7 @@ leader 交接**由用户负责**：leader 只准备材料与汇报，不自行�
 
 ## 8. 人类介入
 
-- 只有“必须人决定”的事才问：授权、风险、取舍、验收。
+- 只有"必须人决定"的事才问：授权、风险、取舍、验收。
 - 不问：代码在哪、怎么实现、常规偏好。
 - 提问格式自由；同一问题不重复问。
 - 用户未回复前，不擅自推进被询问的那一步。
@@ -291,7 +293,7 @@ leader 交接**由用户负责**：leader 只准备材料与汇报，不自行�
 - [ ] 新 worker 只读章程就知道自己做什么、不做什么
 - [ ] 新 leader 只读章程 + 岗位表就能接管
 - [ ] 没有写死的阈值/配额/模板
-- [ ] 交接单字段覆盖了“接手就能干活”的最小信息
+- [ ] 交接单字段覆盖了"接手就能干活"的最小信息
 
 **用户确认（决定是否正式启用）：**
 
@@ -318,3 +320,368 @@ leader 交接**由用户负责**：leader 只准备材料与汇报，不自行�
 - leader 交接：用户负责；用户未启动继任前，当前 leader 继续履职，不得自行交接。
 - 章程损坏或缺失：团队停止派活，leader 先向用户报告并重建。
 - 身份冲突（两个会话都声称是 leader）：以 `leader_session` + `generation` 为准，另一个降为 worker；无法判定时上报用户。
+
+---
+
+<a id="en"></a>
+
+# Team charter · default draft (v0.1)
+
+> [中文](#zh) ｜ English
+>
+> This is the **default draft shipped with the plugin at install time**, not the final charter.
+> After installation the leader reads this file, fills it in for the current project, writes it to
+> `team/charter.md` and submits it to the user for confirmation. **Only a charter with
+> `status: confirmed` may activate the team** (create workers, dispatch work, multicast).
+> Everything marked `[editable]` is a default suggestion; the leader and the user may change it at any
+> time. The framework neither enforces nor hard-codes it.
+
+---
+
+## 0. Metadata (machine-readable part)
+
+```yaml
+charter:
+  version: 1                    # +1 on every substantive change
+  status: draft                 # draft | confirmed
+  confirmed_by: null            # set to user once confirmed
+  confirmed_at: null
+  project: ""
+  workspace: ""                 # team workspace root
+  leader_session: ""            # sessionId of the current leader
+  leader_assigned_by: ""        # user when the user assigned it; auto when the first session became leader
+  generation: 1                 # leader generation, +1 on handoff
+  spawn_authority: ask          # ask (approve every time) | autonomous (user delegated)
+
+teams:
+  id_prefix:
+    leader: "at-lead-"
+    worker: "at-w-"
+
+messaging:                      # [editable] default delivery preference
+  task: queue                   # dispatch: wake
+  question: queue
+  report: inject                # report: no wake
+  notice: inject
+  urgent: steer
+
+observation:                    # risk observation, not a quota
+  mode: leader_defined          # the leader chooses cadence; can be disabled
+  cadence: null                 # null = the leader decides
+```
+
+> Machines read only the fields above; everything else is an agreement for leaders/workers to read, so
+> changing the prose never requires changing code.
+
+---
+
+## 1. Team goals and boundaries
+
+```markdown
+Goal:
+- (what this project must achieve, in one sentence)
+
+Not doing:
+- (explicitly out of scope, so workers do not wander)
+
+Definition of done:
+- (what counts as delivered: artifacts, verification, who signs off)
+```
+
+---
+
+## 2. Roles and responsibilities
+
+| Role | Responsibility | Artifact | Acceptance | Current session |
+|---|---|---|---|---|
+| Planning | Break down tasks, define interfaces, write the acceptance list | Task list / interface contract | Leader review | `at-w-01` |
+| Implementation | Write code/docs within the role's scope | Changes + self-test | Verification role | `at-w-02` |
+| Verification | Run tests, check the acceptance list | Verification report | Leader review | `at-w-03` |
+| Review | Independent review (no implementation) | Review comments | Leader review | `at-w-04` |
+| Integration | Merge, regression, delivery | Delivery bundle | User | `at-w-05` |
+
+Default order: **requirements → implementation → verification → review → integration** (failures fall
+back to implementation).
+
+Rules:
+- One session per role; changing roles means a new session with a new id.
+- The number and split of roles follows the project; five roles are not mandatory.
+- The leader is the sole writer of the roster; workers read it.
+
+---
+
+## 3. Sessions and identity
+
+- Worker id: `at-w-<seq>-<role>`; leader id: `at-lead-<generation>`.
+- Each worker gets its own directory (subdirectory or worktree) and does not share write access.
+- Archiving: old sessions keep a read-only record; a successor works from the **handoff document**, not
+  from the old conversation.
+
+### 3.1 Leader identity
+
+- **The first session in this mode is the leader by default**, no application needed.
+- **Multiple concurrent leaders are not accepted** (user confirmed 2026-11-21): a second `agent-team`
+  session never becomes leader and must not take over on its own. To scale, attach sub-agents under
+  workers (level by level) rather than opening another peer leader session.
+- The user may assign another session as leader directly (change `leader_session`, or have the current
+  leader perform the transfer); `leader_assigned_by` is recorded as `user`.
+- Changing the leader is a generation handoff: `generation + 1`, roster ownership moves, the old leader
+  retires.
+- Sessions opened afterwards are worker candidates and **never become leader automatically**.
+
+### 3.2 Authority to open new sessions (delegated by the user)
+
+**Two kinds of new session, two different authorities — do not mix them up:**
+
+| Case | Definition | Who approves | Who executes | User approval needed |
+|---|---|---|---|---|
+| **Dispatch** | Open a session for a new task/role | User (`ask`) or leader (`autonomous`) | Leader | Yes under `ask` |
+| **Handoff replacement** | Replace a session in the same role (old one is worn out) | **Leader** | Leader | **No**; the leader reports afterwards |
+
+`spawn_authority` constrains **dispatch only**:
+
+| Level | Meaning | Behaviour |
+|---|---|---|
+| `ask` (default) | Every dispatch needs user approval | The leader files a request first: why, which role, expected output, who takes it; only after approval may it open the session |
+| `autonomous` | The user explicitly delegated dispatch (panel "full authority" switch) | The leader may open sessions itself, but logs each creation and explains it in the next risk report |
+
+- **Handoff replacement is not constrained by `spawn_authority`**: the worker asks the leader; the leader
+  approves, creates the successor, updates the roster, and then reports the replacement (why and what
+  happened) to the user.
+- Authority belongs to the user: the level can be switched at any time and each switch is written into
+  the charter change log.
+- Unapproved dispatch requests are not executed; the leader may not open first and file later.
+
+### 3.3 Who owns each handoff
+
+| Handoff | Owner | Notes |
+|---|---|---|
+| Worker session handoff | **Leader** | Worker asks, leader approves and executes, leader reports to the user |
+| Leader session handoff | **User** | The leader prepares material and reports; the user decides and starts the successor |
+| Leader unavailable (incident) | **User approves on the leader's behalf** | Pending requests go to the team pending list and the user is notified; after approval the system executes; the leader records it afterwards |
+
+> The leader is accountable to the user and has its own handoff flow, so it does not normally rely on
+> manual approval; manual approval is a fallback for incidents, not the norm.
+
+---
+
+## 4. Messaging rules
+
+### 4.1 Who may message whom `[editable]`
+
+| Sender | Allowed recipients |
+|---|---|
+| Leader | Everyone / several named / a role group / one |
+| Worker | The leader, peers in the same group, targets the leader designates |
+| Anyone | Direct contact with the user is forbidden (always through the leader) |
+
+Out-of-policy delivery is rejected by the authority layer and the sender gets a receipt.
+
+### 4.2 Message kinds
+
+`task` (dispatch), `question` (help/ask), `answer`, `report`, `notice`, `handoff-request`,
+`handoff-approval`, `roster-update`.
+
+### 4.3 Multicast conventions
+
+- Notifying everyone → `to: all` with `inject` (no wake).
+- Dispatching to several → list the ids explicitly, use `queue`.
+- One recipient → send to that one; do not use `all` for convenience.
+- A worker's three channels (settled 2026-11-21): **unicast** (one session id) / **multicast** (several
+  explicit ids) / **same-role multicast** (`role:<own role>`, i.e. "peers" in §4.1). Broadcast `all` is
+  leader-only.
+- Long bodies (logs, large code) → put them in `body_ref`; the envelope carries only the summary.
+
+### 4.4 Forbidden
+
+- Auto-forwarding a message to a third party.
+- Using multicast where point-to-point is meant (noise).
+- Bypassing the leader to ask the user for something.
+
+### 4.5 Task tiering and reasoning effort
+
+When dispatching, the leader must tier the task and set the session's reasoning effort before delivery.
+
+| Tier | Rough criterion | Default effort |
+|---|---|---|
+| `simple` | One file, mechanical change, Q&A, notice, report | `off` |
+| `moderate` | Several files, research needed but the path is clear, routine work | `high` |
+| `complex` | Architecture or cross-module, high risk, long running, real trade-offs | `max` |
+
+- **`max` is only for `complex`**, and the leader must state the reason in the dispatch note; if `high`
+  is enough, do not use `max`.
+- Effort may change per task within a session (set before each dispatch), not frozen at creation.
+- The handoff document records a suggested effort; the successor sets effort again for its next task.
+- Reports and the panel count `max` usage, **display only, never block**.
+- The mapping is configurable (charter or plugin config), never hard-coded.
+
+---
+
+## 5. Risk-control stance (default; the leader may change it)
+
+- **The framework sets no thresholds and does not define "anomaly".** The leader judges.
+- Observation cadence is the leader's call and can be disabled.
+- **Two cases that must be reported to the user**:
+  1. the leader judged something anomalous and acted (even if it only sent a reminder);
+  2. the leader is unsure whether it is anomalous.
+- Minimum content of a report: enough for the user to **review and decide the next step** (what
+  happened, who is involved, where the evidence is, what was done, what the user must decide). **Format
+  is free** — follow the project and the user's habits.
+- The leader may pause a single session; pausing the whole team needs user confirmation.
+- When things are normal, do not intervene: "many messages" alone is not a reason to act.
+
+---
+
+## 6. Handoff
+
+### 6.1 Trigger
+
+- The worker or leader decides (considering context usage, task stage, output stability); **no hard
+  thresholds**.
+- A handoff must happen at a persistable checkpoint, never in the middle of a tool call.
+
+### 6.2 Handoff document fields `[editable]`
+
+```markdown
+- Role and goal
+- Done (verifiable items)
+- Artifact paths (files / branches / links)
+- Key decisions and reasons
+- Known traps and unverified items
+- Next step (the first executable action)
+- Unfinished tasks (with dependencies)
+- Sub-agent state (say clearly what is still running)
+```
+
+### 6.3 Flow (worker; the leader owns it)
+
+1. the worker writes the handoff document;
+2. sends `handoff-request` to the leader (old id → placeholder new id, role, document path);
+3. the leader approves (**no user application needed**);
+4. the leader updates the roster, creates the successor, replies `handoff-approval`;
+5. the successor starts and reads the handoff;
+6. the old session is archived;
+7. the leader reports to the user: which role changed sessions, why, and how it went.
+
+### 6.4 Flow (leader; the user owns it)
+
+A leader handoff **belongs to the user**: the leader only prepares material and reports; it does not
+start its own successor and does not transfer ownership itself.
+
+1. the leader writes the handoff document + succession plan (suggested new leader session, roster
+   handover, unfinished tasks, unread messages);
+2. reports to the user (this is a notice plus recommendation, not an application, and it is not
+   self-executed);
+3. the user decides; the user starts the successor, or explicitly instructs the leader to act;
+4. the roster `generation + 1`; ownership moves to the new leader;
+5. the old leader retires.
+
+### 6.5 Failure handling and degradation
+
+If any step fails: keep the original session, return to the pre-handoff state, and tell the initiator
+why; never silently drop the handoff document.
+
+**Degradation when the leader is unavailable:**
+
+- Pending worker handoff requests **stay pending**, enter the team pending list, and the user is
+  notified.
+- The user **approves manually**; once approved the system creates the session and updates the roster.
+- No auto-approval, no silent drop, no letting them expire.
+- Workers still never contact the user directly: the user sees a system pending item, not a worker
+  message.
+- After the leader recovers it records the decision (who approved, why, result).
+
+#### Form of the pending item (manual approval)
+
+- **Carrier**: the "team pending" list in the plugin panel, not a chat message. The host service
+  persists it, so it survives refresh and restart. (Panel spec: [panels.md](./panels.md))
+- **Signal**: the panel badge; opening it shows the requesting session, role, reason, handoff document
+  and suggested action. (Desktop notifications were dropped.)
+- **Actions**: approve / reject / ask for more info; on approval the system creates the session and
+  updates the roster; the result is logged and recorded in the team record.
+- **DSH's built-in approval is deliberately not used** for this, because its semantics and limits do not
+  match:
+  - `approval.request` must be called **inside an open turn** (idle sessions reject it outright);
+  - it is bound to a `toolName` — it means "approve a tool call", not "decide a team matter";
+  - it is subject to the session's approval policy: if the user sets "never ask", the request is
+    auto-rejected and the handoff gets stuck;
+  - it only offers `allowed-once`; there is no "remember for this task" semantics.
+- **Optional extra**: while the leader is online it may send a confirmation card via `ask_user_question`
+  as an immediate nudge; that neither replaces the pending queue nor covers the leader-down case.
+
+---
+
+## 7. Sub-agents `[editable]`
+
+- Every session may spawn sub-agents; default depth 1.
+- A sub-agent only does the assigned sub-task and returns the result to the parent.
+- When the parent hands off, sub-agent state goes into the handoff document; anything still running is
+  first interrupted or explicitly handed over.
+- Sub-agents do not run their own multicast and never contact the user.
+
+---
+
+## 8. Human involvement
+
+- Ask only about things a human must decide: authority, risk, trade-offs, acceptance.
+- Do not ask: where the code is, how to implement something, ordinary preferences.
+- Question format is free; never ask the same question twice.
+- Until the user answers, do not push the step that was asked about.
+
+---
+
+## 9. Change and versioning
+
+- Who may change it: the leader proposes and the user confirms; the user may edit directly.
+- Every substantive change bumps `version` and is recorded.
+- Scope: **new sessions** follow the new charter; already-open sessions keep the version they started
+  with unless the user asks them to reload.
+- The charter itself is audited: what changed, by whom, when.
+
+```markdown
+Change log:
+- v1 (2026-11-20): initial version, completed from the default draft
+```
+
+---
+
+## 10. Confirmation checklist
+
+**Leader self-check (before submitting to the user):**
+
+- [ ] Every rule is executable by a worker (not a slogan)
+- [ ] A new worker reading only the charter knows what to do and what not to do
+- [ ] A new leader can take over by reading the charter plus the roster
+- [ ] No hard-coded thresholds, quotas or templates
+- [ ] The handoff fields cover the minimum needed to "take over and work"
+
+**User confirmation (whether to activate the team):**
+
+- [ ] Goals and boundaries agreed
+- [ ] Role split agreed
+- [ ] Messaging rules agreed (who may contact whom)
+- [ ] Risk-reporting requirements agreed
+- [ ] Handoff flow agreed
+- [ ] Leader identity rules agreed (first session is leader; the user may change it)
+- [ ] Dispatch authority level agreed (`ask` / `autonomous`)
+- [ ] Task tiering and effort mapping agreed (simple→off / moderate→high / complex→max)
+- [ ] Handoff ownership agreed (worker handoffs → leader, leader handoffs → user, leader down → user approves)
+
+To confirm: set `status` to `confirmed` and fill in `confirmed_by` and `confirmed_at`.
+
+---
+
+## 11. Behaviour when unconfirmed or unauthorised
+
+- `status: draft`: the leader may draft, discuss and write the charter; it **must not create workers,
+  dispatch work or multicast**.
+- `status: confirmed` + `spawn_authority: ask`: dispatch is allowed, but **every new session** needs user
+  approval; **handoff replacement does not**.
+- `status: confirmed` + `spawn_authority: autonomous`: the leader may dispatch itself, logging each
+  creation and explaining it in the next risk report.
+- Worker handoff: the leader's approval takes effect; the leader reports afterwards.
+- Leader handoff: owned by the user; until the user starts a successor the current leader keeps working
+  and must not hand off on its own.
+- Charter damaged or missing: the team stops dispatching; the leader reports to the user and rebuilds it.
+- Identity conflict (two sessions both claim to be leader): `leader_session` + `generation` decide; the
+  other is demoted to worker. If it cannot be decided, escalate to the user.
