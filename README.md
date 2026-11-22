@@ -18,7 +18,7 @@ npm i -g pnpm
 dsh plugin --profile desktop add dsh-agent-team
 
 # 方式二：GitHub（直接从仓库的 agent-team/ 子目录安装）
-dsh plugin --profile desktop add "github:OWNER/REPO#path:/agent-team"
+dsh plugin --profile desktop add "github:1289959658wang-hue/dsh-agent-team#path:/agent-team"
 ```
 
 > 实测记录（含组合后的配置、运行时路由 200、默认工作区推导）：[docs/verification-install.md](./docs/verification-install.md)
