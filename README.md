@@ -386,7 +386,7 @@ registry is used. To pin a specific directory, set an absolute path in
 
 ## Documentation
 
-The docs are currently written in Chinese.
+Most docs are bilingual (Chinese first, English second, in the same file). Deep reference sections — architecture, tool reference, HTTP API, data model — are Chinese-only for now; the English guide to `docs/GUIDE.md` links to them.
 
 | To learn | Read |
 |---|---|

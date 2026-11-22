@@ -7,6 +7,8 @@
 面向使用者的入口是根目录 [`README.md`](../README.md)；这里是更细的设计、实测与防坑记录。
 当前版本 **1.10.0**。
 
+> **语言**：面向使用者的文档（README、CONTRIBUTING、本索引、panels、charter、effort-policy、verification-install、GUIDE）已中英双语；`verification-*.md` 与 `CHANGELOG` 是过程证据，保持中文。
+
 ## 使用者需要读的
 
 | 文档 | 内容 |

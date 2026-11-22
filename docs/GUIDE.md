@@ -1,4 +1,8 @@
+<a id="zh"></a>
+
 # Agent Team 使用与架构说明（v1.9.0）
+
+> 中文 ｜ [English](#en)
 
 > 这份文档是**完整说明**：它是什么、怎么装、怎么用、里面怎么转、每个功能与接口的准确含义、以及已知边界。
 > 想先看结论：第 1 节「三分钟速览」。想改代码：第 3 节「架构」；想排错：第 12 节。
@@ -733,3 +737,186 @@ node scripts/guard-daily-profile.mjs          # 必须 exit 0
 | **inject / 旁听** | 只进对方下一步上下文、不唤醒算力的投递方式 |
 | **SSE** | Server-Sent Events，面板的实时通道；断流退回轮询 |
 | **归档（消息）** | 从活跃 store 挪进 `.team/archive/messages/`，不删除 |
+
+---
+
+<a id="en"></a>
+
+# Agent Team — English guide
+
+> [中文](#zh) ｜ English
+
+This is a **condensed English guide** to installing, using and troubleshooting the plugin. The complete
+manual is the Chinese text above; where this guide stops short, it points at the Chinese section that
+covers the detail (architecture §3, tool reference §7, HTTP API §8, data model §9, glossary §15).
+
+## 1. What it is
+
+The plugin adds two working modes to DeepSeek Harness: **`Agent Team · Leader`** and
+**`Agent Team · Worker`**. A leader session acts as a foreman: it does not write code itself, it
+**opens worker sessions, dispatches tasks, collects reports and approves handoffs**. Worker sessions
+work only inside their role and report back. All sessions talk through a host-side multicast log.
+
+Three things it gets right:
+
+1. **Isolation is structural.** Team tools are assembled only inside the team preset scopes, so a
+   standard session **cannot even see** `team_*` tools — this is not prompt discipline and not a
+   runtime rejection.
+2. **Approval is enforced.** By default every dispatch becomes a pending request that only the user can
+   approve in the panel; there is also a one-switch "full authority" level, with every autonomous
+   dispatch leaving a log entry.
+3. **It maintains itself.** The leader seat can be transferred from the panel; handoffs can be sent back
+   for more information; the store archives old messages instead of deleting them.
+
+## 2. When to use it
+
+Use it for **long-running projects**: work spanning many sessions, context that will eventually
+overflow, parallel work across roles, and "someone else has to pick this up". Do **not** use it for
+small tasks — the coordination buys you little while multiplying token cost. Details and a decision
+table are in the [README](../README.md), section "Read this first".
+
+## 3. Install, upgrade, uninstall
+
+**Users install it through DSH's plugin path** (the exact command is in the README), then restart the
+desktop app. The commands below are for a **repository checkout** (maintainers or a manual install).
+
+```bash
+# install into the desktop profile (backs up package.json + cordis.patch.yml first)
+node scripts/desktop-bundle.mjs install
+node scripts/guard-daily-profile.mjs        # criterion: exit 0
+# restart the desktop app
+```
+
+`install` adds a `link:<repo>/agent-team` dependency to `<DSH_HOME>/profiles/desktop/`, appends
+`dsh-agent-team` to the profile's bundle list, and writes the patch — backing up and hashing both files
+before touching them.
+
+**After upgrading DSH**, regenerate the preset tool list, otherwise team sessions may silently lose
+tools:
+
+```bash
+node scripts/gen-preset-tools.mjs --check    # see whether it drifted
+node scripts/gen-preset-tools.mjs --write    # rewrite both lists from the new standard
+node scripts/guard-daily-profile.mjs         # exit 0
+# restart the desktop app
+```
+
+> Why this is needed: a preset's `plugins` is a **complete list**; there is no "inherit from standard".
+> Since 1.8.0 it is a **curated allowlist** (`CURATED` in the generator) whose entries are taken from
+> the shipped `standard`. A missing id makes `--check` fail loudly instead of failing at startup.
+
+```bash
+# uninstall
+node scripts/desktop-bundle.mjs uninstall
+node scripts/guard-daily-profile.mjs
+# restart the desktop app
+```
+
+Team data in `.team/` is not deleted. To reset a team use the panel or
+`POST /agent-team/admin/reset` (`confirm: "RESET"`).
+
+## 4. First run
+
+1. **Create a leader session** — new session → pick `Agent Team · Leader`. The first leader session of a
+   team becomes the leader; later ones are told who the leader is.
+2. **Tell it what to do** — no configuration needed: *"Look at the roster, then spawn a frontend worker
+   to build the login page, and make the task brief thorough."* The leader calls `team_roster` /
+   `team_directory`, then `team_spawn_worker`.
+3. **Approve the dispatch** — under the default `ask` level a dispatch becomes a pending request. The
+   **Agent Team** button at the bottom of the sidebar shows a badge; open it and click **Approve**. The
+   worker session is created and the task delivered. Switch to "full authority" in the panel to skip
+   this step (every dispatch is still logged).
+4. **Workers work and report** — a worker is a real peer session with its own context and tools
+   (`team_report`, `team_post`). The leader uses `team_context` to see who is close to the context limit
+   and `team_status` to see who is busy and how deep their queue is.
+5. **Handoff when context fills** — at 45% handoff is advised, at 55% required (configurable). The worker
+   calls `team_handoff_request`, writes a self-contained handoff, then **latches** itself. The leader
+   approves; a successor is created in the same role, the handoff is delivered, the old session is
+   archived. A leader's own successor request can only be approved by the user.
+6. **If the leader is gone** — use **Transfer…** in the leader card of the panel; demotion and
+   appointment happen in a single write and are recorded in `leaderHistory`.
+
+## 5. Panel
+
+The **Agent Team** button at the bottom of the sidebar shows a **red count badge** for pending items, or
+an **amber dot** when the leader is gone or deliveries failed. It opens a right-hand drawer with two
+tabs; the **workspace dropdown at the top** switches teams (each workspace has its own team) without
+disturbing any running session.
+
+| Tab | Contents |
+|---|---|
+| **Pending** | Leader card (status, Transfer…), dispatch authority switch, roster snapshot, and pending items — dispatch requests (approve / reject with an optional reason) and handoff requests (approve / reject / ask for more info, reason required) |
+| **Messages** | Read-only audit: four filters (kind / recipient / time / delivery state), search, per-recipient delivery state, on-demand bodies, "load earlier" by id cursor, live-vs-polling indicator |
+
+The panel is **read-only plus approvals**: no editing, deleting, retracting, sending on behalf of others,
+or exporting. Full specification: [panels.md](./panels.md).
+
+## 6. How it works (short version)
+
+- **Two presets, one host service.** The host plugin owns the state; the two presets register their tools
+  inside their own scopes and read the state through the `agentTeam` service.
+- **One store per workspace.** Since 1.9.0 the team store lives in `<workspace>/.team/`; tools resolve
+  the caller's session to its workspace, the panel passes `?workspace=`, and cross-workspace delivery is
+  rejected.
+- **Three delivery modes.** `followup` (next turn + wake), `steer` (next step now + wake), `inject`
+  (next step, **no wake**) — chosen by kind and priority. A message is always stored first, then
+  delivered; each recipient carries its own delivery state.
+- **Latch.** After filing a handoff the old session may not start new steps until the request is
+  resolved, so it cannot keep editing while handing over.
+- **Everything is audited.** Roster, messages, dispatch and handoff requests are single-writer state on
+  disk; the panel projects it and never mutates sessions.
+
+Architecture in depth: §3 of the Chinese text above.
+
+## 7. Configuration
+
+`cordis.patch.yml` → `agent-team-host.config`:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `workspaceRoot` | *(empty)* | Which workspace's team store to use. Empty = the default workspace from the DSH registry; set an absolute path to pin one |
+| `spawnAuthority` | `ask` | Initial dispatch authority (`ask` / `autonomous`); the runtime value lives in `state.authority` |
+| `maxMessages` | `5000` | Active message ceiling; older ones are archived (never deleted) |
+| `retainMessages` | `2000` | How many messages to keep after archiving |
+| `effortPolicy` | `{simple:off, moderate:high, complex:max}` | complexity → reasoning effort |
+| `contextWindow` | `1048576` | Context window used for the `team_context` percentage |
+| `handoffSuggestAt` | `0.45` | Advice-to-hand-off threshold |
+| `handoffRequireAt` | `0.55` | Must-hand-off threshold |
+
+## 8. Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| No team tools at all | The session is not in a team mode, or the preset failed to load | Check the mode selector; run `node scripts/guard-daily-profile.mjs`; restart |
+| "This session is not the leader" | The team already has a leader | Normal. To replace it use the leader card's Transfer…, or archive the old leader |
+| Dispatch does nothing | The authority level is `ask`, so the request is waiting for you | Open the panel → Pending → Approve |
+| Worker title is `[Agent Team m-…]` | `rename` failed (the error is stored in the roster as `renameError`) | Retry after restart; check DSH logs if it persists |
+| Worker seems stuck | It filed a handoff and is latched | Approve / reject / ask for more info — all three release the latch |
+| Panel shows "polling" instead of "live" | SSE disconnected | Normal degradation; check that `GET /agent-team/events` returns 200 |
+| The workspace dropdown does nothing | Electron drag regions can swallow clicks, or a panel clipped the list | Fixed in 1.9.1 (drawer is `no-drag`, list is `position: fixed`); if it recurs, add `&diag=1` to the URL, click once, then read `<workspace>/.team/client-diag.jsonl` |
+| Messages show "delivered" but nothing happens | Delivery ≠ processing: `inject` does not wake an idle session | Use `priority: "urgent"` or a `task`/`report` kind (queue), and check `team_status` |
+| `store.json` is huge | Many messages | `POST /agent-team/admin/prune` (dry run first) |
+
+## 9. Known limits
+
+- No desktop notifications (dropped by the user).
+- No editing, deleting, retracting or exporting from the panel; messages are an audit record.
+- No read receipts: delivery states are `pending / delivered / injected / held / failed`.
+- One message wakes one turn: ten workers reporting means ten turns; use `notice` (inject) for pure
+  information.
+- Multiple concurrent leaders are not supported; to scale, attach sub-agents under workers.
+
+The full list is §13 of the Chinese text above.
+
+## 10. Rollback
+
+```bash
+git tag --sort=-creatordate | head            # pick a known-good tag
+git reset --hard <tag>                        # code back to that version
+node scripts/desktop-bundle.mjs uninstall     # remove it from the desktop profile (backs up first)
+node scripts/guard-daily-profile.mjs          # must exit 0
+# restart the desktop app
+```
+
+Rolling the code back does not touch runtime data in `.team/`; to start fresh, reset the team from the
+panel or with `POST /agent-team/admin/reset`.
